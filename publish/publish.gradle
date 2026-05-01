@@ -1,9 +1,18 @@
 apply plugin: 'maven-publish'
 
-def propertyOrEnv = { propertyName, envName ->
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+
+def publishingProperty = { propertyName, envName ->
     def value = findProperty(propertyName)
     if (value == null || value.toString().trim().isEmpty()) {
         value = System.getenv(envName)
+    }
+    if (value == null || value.toString().trim().isEmpty()) {
+        value = localProperties.getProperty(propertyName)
     }
     return value?.toString()?.trim()
 }
@@ -63,18 +72,18 @@ afterEvaluate {
                 url = uri("${rootDir}/releases/${project.ext.artifactId}")
             }
 
-            def internalMavenUrl = propertyOrEnv('internalMavenUrl', 'INTERNAL_MAVEN_URL')
+            def internalMavenUrl = publishingProperty('internalMavenUrl', 'INTERNAL_MAVEN_URL')
             if (internalMavenUrl) {
                 maven {
                     name = 'internalMaven'
                     url = uri(internalMavenUrl)
-                    allowInsecureProtocol = propertyOrEnv(
+                    allowInsecureProtocol = publishingProperty(
                             'internalMavenAllowInsecureProtocol',
                             'INTERNAL_MAVEN_ALLOW_INSECURE_PROTOCOL'
                     )?.toBoolean() ?: false
 
-                    def internalMavenUsername = propertyOrEnv('internalMavenUsername', 'INTERNAL_MAVEN_USERNAME')
-                    def internalMavenPassword = propertyOrEnv('internalMavenPassword', 'INTERNAL_MAVEN_PASSWORD')
+                    def internalMavenUsername = publishingProperty('internalMavenUsername', 'INTERNAL_MAVEN_USERNAME')
+                    def internalMavenPassword = publishingProperty('internalMavenPassword', 'INTERNAL_MAVEN_PASSWORD')
                     if (internalMavenUsername || internalMavenPassword) {
                         credentials {
                             username = internalMavenUsername ?: ''
