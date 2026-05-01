@@ -1,5 +1,13 @@
 apply plugin: 'maven-publish'
 
+def propertyOrEnv = { propertyName, envName ->
+    def value = findProperty(propertyName)
+    if (value == null || value.toString().trim().isEmpty()) {
+        value = System.getenv(envName)
+    }
+    return value?.toString()?.trim()
+}
+
 android {
     publishing {
         singleVariant("release") {
@@ -49,10 +57,31 @@ afterEvaluate {
                 }
             }
         }
-        //publish to filesystem repo
-        repositories{
+        repositories {
+            // publish to filesystem repo
             maven {
                 url = uri("${rootDir}/releases/${project.ext.artifactId}")
+            }
+
+            def internalMavenUrl = propertyOrEnv('internalMavenUrl', 'INTERNAL_MAVEN_URL')
+            if (internalMavenUrl) {
+                maven {
+                    name = 'internalMaven'
+                    url = uri(internalMavenUrl)
+                    allowInsecureProtocol = propertyOrEnv(
+                            'internalMavenAllowInsecureProtocol',
+                            'INTERNAL_MAVEN_ALLOW_INSECURE_PROTOCOL'
+                    )?.toBoolean() ?: false
+
+                    def internalMavenUsername = propertyOrEnv('internalMavenUsername', 'INTERNAL_MAVEN_USERNAME')
+                    def internalMavenPassword = propertyOrEnv('internalMavenPassword', 'INTERNAL_MAVEN_PASSWORD')
+                    if (internalMavenUsername || internalMavenPassword) {
+                        credentials {
+                            username = internalMavenUsername ?: ''
+                            password = internalMavenPassword ?: ''
+                        }
+                    }
+                }
             }
         }
     }

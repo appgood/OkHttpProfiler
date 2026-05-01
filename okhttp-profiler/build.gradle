@@ -32,7 +32,7 @@ dependencies {
 
 ext {
     artifactId = "okhttp-profiler"
-    releaseVersion = "1.2.0-internal.2"
+    releaseVersion = "1.2.0-internal.3"
     libraryDescription = 'This library is using for Android Studio plugin Okhttp Profiler'
 }
 
