@@ -1,12 +1,16 @@
-apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
 
 android {
-    compileSdkVersion 34
+    compileSdk rootProject.ext.androidCompileSdk
+
     defaultConfig {
         applicationId "io.nerdythings.okprofilerexample"
-        minSdkVersion 21
-        targetSdkVersion 34
+        minSdk rootProject.ext.androidMinSdk
+        targetSdk rootProject.ext.androidTargetSdk
         versionCode 1
         versionName "1.0"
     }
@@ -16,34 +20,29 @@ android {
             storePassword "testtest"
             keyAlias "testtest"
             keyPassword "testtest"
-            v1SigningEnabled true
-            v2SigningEnabled true
+            v1SigningEnabled = true
+            v2SigningEnabled = true
         }
     }
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.configRelease
+            signingConfig = signingConfigs.configRelease
         }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.configRelease
+            signingConfig = signingConfigs.configRelease
         }
     }
-    kotlinOptions {
-        jvmTarget = '17'
-    }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility rootProject.ext.javaLanguageVersion
+        targetCompatibility rootProject.ext.javaLanguageVersion
     }
-    namespace 'com.localebro.okprofilerexample'
+    namespace = 'com.localebro.okprofilerexample'
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+        buildConfig = true
     }
 }
 
