@@ -1,6 +1,7 @@
 package io.nerdythings.okhttp.profiler
 
 import io.nerdythings.okhttp.profiler.transfer.DataTransfer
+import io.nerdythings.okhttp.profiler.transfer.LocalServiceDataTransfer
 import io.nerdythings.okhttp.profiler.transfer.LogDataTransfer
 import okhttp3.Interceptor
 import okhttp3.Interceptor.Chain
@@ -16,8 +17,13 @@ import java.util.concurrent.atomic.AtomicLong
  * @author itkacher
  * @since 9/25/18
  */
-class OkHttpProfilerInterceptor : Interceptor {
-    private val dataTransfer: DataTransfer = LogDataTransfer()
+class OkHttpProfilerInterceptor @JvmOverloads constructor(
+    transport: ProfilerTransport = ProfilerTransport.LOCAL_SERVICE
+) : Interceptor {
+    private val dataTransfer: DataTransfer = when (transport) {
+        ProfilerTransport.LOCAL_SERVICE -> LocalServiceDataTransfer()
+        ProfilerTransport.LOGCAT -> LogDataTransfer()
+    }
     private val format: DateFormat = SimpleDateFormat("ddhhmmssSSS", Locale.US)
     private val previousTime = AtomicLong()
 
@@ -25,16 +31,31 @@ class OkHttpProfilerInterceptor : Interceptor {
     override fun intercept(chain: Chain): Response {
         val id = generateId()
         val startTime = System.currentTimeMillis()
-        dataTransfer.sendRequest(id, chain.request())
+        trySend {
+            dataTransfer.sendRequest(id, chain.request())
+        }
         try {
             val response = chain.proceed(chain.request())
-            dataTransfer.sendResponse(id, response)
-            dataTransfer.sendDuration(id, System.currentTimeMillis() - startTime)
+            trySend {
+                dataTransfer.sendResponse(id, response)
+            }
             return response
         } catch (e: Exception) {
-            dataTransfer.sendException(id, e)
-            dataTransfer.sendDuration(id, System.currentTimeMillis() - startTime)
+            trySend {
+                dataTransfer.sendException(id, e)
+            }
             throw e
+        } finally {
+            trySend {
+                dataTransfer.sendDuration(id, System.currentTimeMillis() - startTime)
+            }
+        }
+    }
+
+    private fun trySend(action: () -> Unit) {
+        try {
+            action()
+        } catch (_: Exception) {
         }
     }
 

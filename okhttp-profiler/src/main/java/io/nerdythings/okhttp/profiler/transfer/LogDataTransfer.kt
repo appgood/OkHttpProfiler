@@ -70,8 +70,10 @@ class LogDataTransfer : DataTransfer {
         }
 
         body?.let {
-            body.writeTo(buffer)
-            largeLog(id, MessageType.REQUEST_BODY, buffer.readString(Charset.defaultCharset()))
+            if (!body.isDuplex() && !body.isOneShot()) {
+                body.writeTo(buffer)
+                largeLog(id, MessageType.REQUEST_BODY, buffer.readString(Charset.defaultCharset()))
+            }
         }
     }
 

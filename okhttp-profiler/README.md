@@ -41,6 +41,19 @@ For installation, you need to include the library to your app (module level) bui
     implementation("io.nerdythings:okhttp-profiler:1.1.1")
 ```
 
+For the internal maintained build that works with the local-service plugin transport:
+
+```kotlin
+    debugImplementation("io.nerdythings:okhttp-profiler:1.2.0-internal.1")
+```
+
+`OkHttpProfilerInterceptor()` uses the local Android Studio plugin service by default in this
+internal build. If you need the old logcat protocol explicitly, use:
+
+```kotlin
+    OkHttpProfilerInterceptor(ProfilerTransport.LOGCAT)
+```
+
 and add Interceptor to okHttpClient in code
 ##### For OkHttp
 ###### Java
@@ -113,4 +126,3 @@ https://plugins.jetbrains.com/plugin/11249-okhttp-profiler
 
 #### Issue with the Android Studio version 4.1 solved in plugin v1.0.13+:
 Unfortunately, Google changed realisation of one class but Intellij doesn't. I fixed it, but Intellij IDEA is no longer supported by the OkHttProfiler.
-
