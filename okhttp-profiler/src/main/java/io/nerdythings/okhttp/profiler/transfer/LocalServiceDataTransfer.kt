@@ -208,6 +208,7 @@ class LocalServiceDataTransfer : DataTransfer {
     }
 
     private fun sendToPort(port: Int, id: String, type: MessageType, message: String): Boolean {
+        var requestWritten = false
         return try {
             val payload = Base64.encodeToString(message.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
             val body = JSONObject()
@@ -227,11 +228,13 @@ class LocalServiceDataTransfer : DataTransfer {
                 output.write(header)
                 output.write(body)
                 output.flush()
+                requestWritten = true
                 val statusCode = readStatusCode(socket.getInputStream())
-                statusCode in 200..299
+                // 请求已经写出后，响应状态读取失败属于未知投递结果；不重发，避免插件端已入库后重复显示。
+                statusCode == null || statusCode in 200..299
             }
         } catch (_: Exception) {
-            false
+            requestWritten
         }
     }
 
