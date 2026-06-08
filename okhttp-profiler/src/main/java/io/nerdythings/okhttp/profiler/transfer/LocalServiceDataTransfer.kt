@@ -5,20 +5,16 @@ import android.os.HandlerThread
 import android.os.Process
 import android.os.SystemClock
 import android.util.Base64
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.Response
-import okio.Buffer
-import okio.Sink
-import okio.Timeout
-import okio.buffer
 import org.json.JSONObject
-import java.io.IOException
 import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.nio.charset.Charset
 
+/**
+ * 通过 Android Studio 插件本地 HTTP 服务发送 profiler 事件。
+ *
+ * 插件会为当前设备配置 adb reverse，App 侧只需要访问设备上的 127.0.0.1 固定端口范围。
+ */
 class LocalServiceDataTransfer : DataTransfer {
     private val handlerThread = HandlerThread(
         "OkHttpProfilerLocalService",
@@ -34,152 +30,12 @@ class LocalServiceDataTransfer : DataTransfer {
     @Volatile
     private var retryAfterMillis: Long = 0L
 
-    @Throws(IOException::class)
-    override fun sendRequest(id: String, request: Request) {
-        enqueue(id, MessageType.REQUEST_METHOD, request.method)
-        enqueue(id, MessageType.REQUEST_URL, request.url.toString())
-        enqueue(id, MessageType.REQUEST_TIME, System.currentTimeMillis().toString())
-
-        val body = request.newBuilder().build().body
-
-        body?.let {
-            body.contentType()?.let { type ->
-                enqueue(
-                    id = id,
-                    type = MessageType.REQUEST_HEADER,
-                    message = CONTENT_TYPE + HEADER_DELIMITER + SPACE + type.toString()
-                )
-            }
-            val contentLength = body.contentLength()
-            if (contentLength != -1L) {
-                enqueue(
-                    id = id,
-                    type = MessageType.REQUEST_HEADER,
-                    message = CONTENT_LENGTH + HEADER_DELIMITER + SPACE + contentLength
-                )
-            }
-        }
-
-        val headers = request.headers
-        for (name in headers.names()) {
-            if (CONTENT_TYPE.equals(name, ignoreCase = true)
-                || CONTENT_LENGTH.equals(name, ignoreCase = true)
-            ) {
-                continue
-            }
-            enqueue(
-                id = id,
-                type = MessageType.REQUEST_HEADER,
-                message = name + HEADER_DELIMITER + SPACE + headers[name]
-            )
-        }
-
-        body?.let {
-            if (!body.isDuplex() && !body.isOneShot()) {
-                enqueue(id, MessageType.REQUEST_BODY, readRequestBody(body))
-            }
-        }
-    }
-
-    @Throws(IOException::class)
-    override fun sendResponse(id: String, response: Response) {
-        val responseBodyCopy = response.peekBody(BODY_BUFFER_SIZE.toLong())
-        val bodyText = appendTruncatedMessageIfNeeded(
-            responseBodyCopy.string(),
-            responseBodyCopy.contentLength(),
-            response.body?.contentLength() ?: -1L
-        )
-        enqueue(id, MessageType.RESPONSE_BODY, bodyText)
-
-        val headers = response.headers
-        enqueue(id, MessageType.RESPONSE_STATUS, response.code.toString())
-        for (name in headers.names()) {
-            enqueue(
-                id,
-                MessageType.RESPONSE_HEADER,
-                name + HEADER_DELIMITER + headers[name]
-            )
-        }
-    }
-
-    override fun sendException(id: String, response: Exception) {
-        enqueue(id, MessageType.RESPONSE_ERROR, response.localizedMessage ?: "Unknown exception")
-    }
-
-    override fun sendDuration(id: String, duration: Long) {
-        enqueue(id, MessageType.RESPONSE_TIME, duration.toString())
-        enqueue(id, MessageType.RESPONSE_END, "-->")
-    }
-
-    private fun enqueue(id: String, type: MessageType, message: String?) {
-        if (message == null) return
+    override fun send(id: String, type: MessageType, message: String) {
         handler.post {
             try {
                 postEvent(id, type, message)
             } catch (_: Exception) {
             }
-        }
-    }
-
-    private fun readRequestBody(body: RequestBody): String {
-        val contentLength = body.contentLength()
-        if (contentLength > BODY_BUFFER_SIZE) {
-            return bodyTooLargeMessage(contentLength)
-        }
-
-        val captureBuffer = Buffer()
-        var capturedBytes = 0L
-        var truncated = false
-        val limitedSink = object : Sink {
-            override fun write(source: Buffer, byteCount: Long) {
-                val remainingBytes = BODY_BUFFER_SIZE - capturedBytes
-                if (remainingBytes > 0L) {
-                    val bytesToCapture = minOf(byteCount, remainingBytes)
-                    source.copyTo(captureBuffer, 0, bytesToCapture)
-                    capturedBytes += bytesToCapture
-                }
-                if (byteCount > remainingBytes) {
-                    truncated = true
-                }
-                source.skip(byteCount)
-            }
-
-            override fun flush() {
-            }
-
-            override fun timeout(): Timeout {
-                return Timeout.NONE
-            }
-
-            override fun close() {
-            }
-        }.buffer()
-
-        body.writeTo(limitedSink)
-        limitedSink.flush()
-
-        val bodyText = captureBuffer.readString(Charset.defaultCharset())
-        return if (truncated) {
-            bodyText + "\n\n" + bodyTruncatedMessage(capturedBytes, contentLength)
-        } else {
-            bodyText
-        }
-    }
-
-    private fun appendTruncatedMessageIfNeeded(body: String, capturedBytes: Long, totalBytes: Long): String {
-        if (totalBytes < 0 || totalBytes <= BODY_BUFFER_SIZE) return body
-        return body + "\n\n" + bodyTruncatedMessage(capturedBytes, totalBytes)
-    }
-
-    private fun bodyTooLargeMessage(totalBytes: Long): String {
-        return "OkHttp Profiler: Body is too large to capture without slowing the app ($totalBytes bytes)."
-    }
-
-    private fun bodyTruncatedMessage(capturedBytes: Long, totalBytes: Long): String {
-        return if (totalBytes >= 0) {
-            "OkHttp Profiler: Body capture truncated to $capturedBytes of $totalBytes bytes."
-        } else {
-            "OkHttp Profiler: Body capture truncated to $capturedBytes bytes."
         }
     }
 
@@ -268,11 +124,7 @@ class LocalServiceDataTransfer : DataTransfer {
         private const val CONNECT_TIMEOUT_MILLIS = 200
         private const val READ_TIMEOUT_MILLIS = 500
         private const val RETRY_DELAY_MILLIS = 2_000L
-        private const val BODY_BUFFER_SIZE = 1024 * 1024
-        private const val HEADER_DELIMITER = ':'
         private const val SPACE = ' '
-        private const val CONTENT_TYPE = "Content-Type"
-        private const val CONTENT_LENGTH = "Content-Length"
         private val PORTS = 28937..28941
     }
 }
